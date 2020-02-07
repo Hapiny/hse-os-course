@@ -14,6 +14,7 @@ enum {
 				// the maximum allowed
 	E_BAD_DWARF     = 6,    // Incorrect DWARF debug information
 	E_FAULT		= 7,	// Memory fault
+	E_INVALID_EXE   = 8,    // Invalid executable
 
 	MAXERROR
 };
