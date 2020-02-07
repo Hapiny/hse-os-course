@@ -11,6 +11,7 @@
 #include <kern/kclock.h>
 #include <kern/picirq.h>
 #include <kern/cpu.h>
+#include <kern/timer.h>
 
 #ifndef debug
 # define debug 0
@@ -70,6 +71,7 @@ clock_idt_init(void)
 {
 	extern void (*clock_thdlr)(void);
 	// init idt structure
+	SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], 0, GD_KT, (int)(&clock_thdlr), 0);
 	SETGATE(idt[IRQ_OFFSET + IRQ_CLOCK], 0, GD_KT, (int)(&clock_thdlr), 0);
 	lidt(&idt_pd);
 }
@@ -135,7 +137,9 @@ trap_dispatch(struct Trapframe *tf)
 		return;
 	}
 
+	// All timers are actually routed through this IRQ.
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_CLOCK) {
+		timer_for_schedule->handle_interrupts();
 		sched_yield();
 		return;
 	}
