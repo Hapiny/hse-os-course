@@ -24,6 +24,8 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "hello", "Hello world command", mon_hello_world },
+	{ "backtrace", "Display stack frames", mon_backtrace },
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -62,7 +64,42 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
-	// Your code here.
+	uint32_t ebp = read_ebp(), eip, arg;
+	struct Eipdebuginfo eip_info;
+	int offset = 0;
+
+	cprintf("Stack backtrace:\n");
+	while (ebp) {
+		cprintf("  ebp %08x", ebp);
+		
+		// print EIP value
+		eip = *(uint32_t *)(ebp + 4);
+		cprintf("  eip %08x", eip);
+
+		// print Args of calling function
+		cprintf("  args");
+		for (int i = 0; i < 5; i++) {
+			arg = *(uint32_t *)(ebp + 8 + i * 4);
+			cprintf(" %08x", arg);
+		}
+
+		debuginfo_eip(eip, &eip_info);
+		offset = eip - eip_info.eip_fn_addr;
+		cprintf("\n         ");
+		cprintf("%s:%d: %.*s+%d", 
+			eip_info.eip_file, eip_info.eip_line, eip_info.eip_fn_namelen, eip_info.eip_fn_name, offset);
+
+		// get EBP of caller function
+		ebp = *(uint32_t *)ebp;
+		cprintf("\n");
+	}
+	return 0;
+}
+
+int 
+mon_hello_world(int args, char **argb, struct Trapframe *tf)
+{
+	cprintf("Hello world from JOS kernel!\n");
 	return 0;
 }
 

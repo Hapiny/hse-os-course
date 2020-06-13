@@ -219,8 +219,12 @@ inline static void run_line_number_program(const void *program_addr,
 // contain an offset in .debug_line of entry associated with compilation unit,
 // in which we search address `p`. This offset can be obtained from .debug_info
 // section, using the `file_name_by_info` function.
-int line_for_address(const struct Dwarf_Addrs *addrs, uintptr_t p,
-                     Dwarf_Off line_offset, int *lineno_store) {
+int 
+line_for_address(const struct Dwarf_Addrs *addrs, 
+                 uintptr_t p,
+                 Dwarf_Off line_offset, 
+                 int *lineno_store) 
+{
         if (line_offset > addrs->line_begin - addrs->line_end) {
                 return -E_INVAL;
         }
