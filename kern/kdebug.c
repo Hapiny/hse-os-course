@@ -62,6 +62,10 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	// address of the next instruction, so we should substract 5 from it.
 	// Hint: use line_for_address from kern/dwarf_lines.c
 	// Your code here:
+	int line_no = 0;
+	uintptr_t call_addr = addr - 0x5;
+	line_for_address(&addrs, call_addr, line_offset, &line_no);
+	info->eip_line = line_no;
 
 	buf = &info->eip_fn_name;
 	code = function_by_info(&addrs, addr, offset, buf, sizeof(char *), &info->eip_fn_addr);
