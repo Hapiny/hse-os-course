@@ -7,22 +7,14 @@
 
 #include <kern/monitor.h>
 #include <kern/console.h>
+#include <kern/env.h>
+#include <kern/trap.h>
+#include <kern/sched.h>
+#include <kern/cpu.h>
 
 void load_debug_info(void);
 void readsect(void*, uint32_t);
 void readseg(uint32_t, uint32_t, uint32_t);
-
-// Test the stack backtrace function (lab 1 only)
-void
-test_backtrace(int x)
-{
-	cprintf("entering test_backtrace %d\n", x);
-	if (x > 0)
-		test_backtrace(x-1);
-	else
-		mon_backtrace(0, 0, 0);
-	cprintf("leaving test_backtrace %d\n", x);
-}
 
 void
 i386_init(void)
@@ -39,15 +31,22 @@ i386_init(void)
 	cons_init();
 
 	cprintf("6828 decimal is %o octal!\n", 6828);
+	cprintf("END: %p\n", end);
+
+	// user environment initialization functions
+	env_init();
 
 	load_debug_info();
 
-	// Test the stack backtrace function (lab 1 only)
-	test_backtrace(5);
+#ifdef CONFIG_KSPACE
+	// Touch all you want.
+	ENV_CREATE_KERNEL_TYPE(prog_test1);
+	ENV_CREATE_KERNEL_TYPE(prog_test2);
+	ENV_CREATE_KERNEL_TYPE(prog_test3);
+#endif
 
-	// Drop into the kernel monitor.
-	while (1)
-		monitor(NULL);
+	// Schedule and run the first user environment!
+	sched_yield();
 }
 
 
