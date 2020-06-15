@@ -87,8 +87,11 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 		debuginfo_eip(eip, &eip_info);
 		offset = eip - eip_info.eip_fn_addr;
 		cprintf("\n         ");
-		cprintf("%s:%d: %.*s+%d", 
-			eip_info.eip_file, eip_info.eip_line, eip_info.eip_fn_namelen, eip_info.eip_fn_name, offset);
+		cprintf("%s:%d: %.*s+%d", eip_info.eip_file, 
+		                          eip_info.eip_line, 
+								  eip_info.eip_fn_namelen, 
+								  eip_info.eip_fn_name, 
+								  offset);
 
 		// get EBP of caller function
 		ebp = *(uint32_t *)ebp;

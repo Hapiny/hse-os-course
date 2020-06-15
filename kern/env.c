@@ -120,8 +120,14 @@ envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 void
 env_init(void)
 {
-	// Set up envs array
-	//LAB 3: Your code here.
+	// Set up envs array (Linked List initialization)
+	int i = NENV - 1;
+	for (; i >= 0; --i) {
+		envs[i].env_link = env_free_list;
+		envs[i].env_status = ENV_FREE;
+		envs[i].env_id = 0;
+		env_free_list = &envs[i];
+	}
 	
 	// Per-CPU part of the initialization
 	env_init_percpu();
@@ -200,8 +206,10 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	e->env_tf.tf_es = GD_KD | 0;
 	e->env_tf.tf_ss = GD_KD | 0;
 	e->env_tf.tf_cs = GD_KT | 0;
-	//LAB 3: Your code here.
-	// e->env_tf.tf_esp = 0x210000;
+
+	// Enough 2 pages of memory for each new environment
+	// 0x2000 = 2 * 4096 = 2 pages
+	e->env_tf.tf_esp = 0x210000 + 0x2000 * (e - envs);
 #else
 #endif
 	// You will set e->env_tf.tf_eip later.
@@ -219,9 +227,7 @@ static void
 bind_functions(struct Env *e, struct Elf *elf)
 {
 	//find_function from kdebug.c should be used
-	//LAB 3: Your code here.
 
-	/*
 	*((int *) 0x00231008) = (int) &cprintf;
 	*((int *) 0x00221004) = (int) &sys_yield;
 	*((int *) 0x00231004) = (int) &sys_yield;
@@ -229,7 +235,6 @@ bind_functions(struct Env *e, struct Elf *elf)
 	*((int *) 0x0022100c) = (int) &sys_exit;
 	*((int *) 0x00231010) = (int) &sys_exit;
 	*((int *) 0x0024100c) = (int) &sys_exit;
-	*/
 }
 #endif
 
@@ -275,11 +280,51 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 	//  to make sure that the environment starts executing there.
 	//  What?  (See env_run() and env_pop_tf() below.)
 
-	//LAB 3: Your code here.
+
+	struct Elf *ELFHDR = (struct Elf *) binary;
+	struct Proghdr *ph, *eph;
+
+	if (ELFHDR->e_magic != ELF_MAGIC)
+		panic("Not executable!");
+	
+	ph = (struct Proghdr *) ((uint8_t *) ELFHDR + ELFHDR->e_phoff);
+	eph = ph + ELFHDR->e_phnum;
+	
+	for (; ph < eph; ph++)
+		if (ph->p_type == ELF_PROG_LOAD) {
+			memset((void *)ph->p_va, 0, ph->p_memsz);
+			memcpy((void *)ph->p_va, binary+ph->p_offset, ph->p_filesz);
+		}
+
+	e->env_tf.tf_eip = ELFHDR->e_entry;
+	//we should set eip to make sure env_pop_tf runs correctly
+
+	// struct Proghdr *ph, *eph;
+	// uint32_t remain_bytes = 0; 
+
+	// // Load each program segment (ignores ph flags)
+	// ph = (struct Proghdr *) ((uint8_t *)binary + ((struct Elf *)binary)->e_phoff);
+	// eph = ph + ((struct Elf *)binary)->e_phnum;
+
+	// for (; ph < eph; ++ph) { 
+	// 	// Only load segments with ph->p_type == ELF_PROG_LOAD
+	// 	// The ELF header should have ph->p_filesz <= ph->p_memsz
+	// 	if (ph->p_type == ELF_PROG_LOAD && ph->p_filesz <= ph->p_memsz) {
+	// 		// The ph->p_filesz bytes from the ELF binary, starting at
+	//         // 'binary + ph->p_offset', should be copied to address ph->p_va
+	// 		memmove((void *)ph->p_va, binary + ph->p_offset, ph->p_filesz);
+
+	// 		// Any remaining memory bytes should be cleared to zero
+	// 		remain_bytes = ph->p_memsz - ph->p_filesz;
+	// 		memset((void *)ph->p_va + ph->p_filesz, 0x0, remain_bytes);
+	// 	}
+	// }
+	// // Setup entry point for the loaded program
+	// e->env_tf.tf_eip = ((struct Elf *)binary)->e_entry;
 	
 #ifdef CONFIG_KSPACE
 	// Uncomment this for task №5.
-	//bind_functions();
+	bind_functions(e, ELFHDR);
 #endif
 }
 
@@ -293,7 +338,18 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type)
 {
-	//LAB 3: Your code here.
+	int err_code = 0;
+	struct Env *new_env = NULL;
+	
+	// The new env's parent ID is set to 0.
+	err_code = env_alloc(&new_env, 0);
+	if (!err_code) {
+		new_env->env_type = type;
+		load_icode(new_env, binary, size);
+	} else {
+		panic("Error in env_alloc: %i", err_code);
+	}
+
 }
 
 //
@@ -322,9 +378,14 @@ env_destroy(struct Env *e)
 	//LAB 3: Your code here.
 	env_free(e);
 
-	cprintf("Destroyed the only environment - nothing more to do!\n");
-	while (1)
-		monitor(NULL);
+	if (e == curenv) {
+		curenv = NULL;
+		sched_yield();
+	}
+
+	// cprintf("Destroyed the only environment - nothing more to do!\n");
+	// while (1)
+	// 	monitor(NULL);
 }
 
 #ifdef CONFIG_KSPACE
@@ -418,10 +479,13 @@ env_run(struct Env *e)
 	//	e->env_tf.  Go back through the code you wrote above
 	//	and make sure you have set the relevant parts of
 	//	e->env_tf to sensible values.
-	//
-	//LAB 3: Your code here.
 
-
+	if (curenv->env_status == ENV_RUNNING) {
+		curenv->env_status = ENV_RUNNABLE;  // Step 1.
+	}
+	curenv = e;                             // Step 2.
+	curenv->env_status = ENV_RUNNING;       // Step 3.
+	curenv->env_runs += 1;                  // Step 4.
 	env_pop_tf(&e->env_tf);
 }
 
