@@ -95,12 +95,33 @@ stab_binsearch(const struct Stab *stabs, int *region_left, int *region_right,
 }
 
 uintptr_t
-stabs_find_function(const char * const fname)
-{
-	// const struct Stab *stabs = __STAB_BEGIN__, *stab_end = __STAB_END__;
-	// const char *stabstr = __STABSTR_BEGIN__, *stabstr_end = __STABSTR_END__;
+stabs_find_function(const char *const fname) {
+	const struct Stab *stabs = __STAB_BEGIN__, *stab_end = __STAB_END__;
+	const char *stabstr = __STABSTR_BEGIN__;
+	
+	const char *str;
+	int cmplen = 0;
+	int fname_len = strlen(fname);
+	if (!fname_len) {
+		return 0;
+	}
 
-	//LAB 3: Your code here.
+	// Parse each .stab section
+	for (; stabs < stab_end; ++stabs) {
+		if (stabs->n_type != N_FUN) {
+			continue;
+		}
+		// n_strx - index into string table of function name in seaction .stabstr
+		str = &stabstr[stabs->n_strx];
+		// Ignore stuff after the colon
+		cmplen = strfind(str, ':') - str;
+
+		if (fname_len == cmplen && !strncmp(fname, str, cmplen)) {
+			// Return found function address
+			// cprintf("Function: %s, addr: %08x\n", fname, stabs->n_value);
+			return stabs->n_value;
+		}
+	}
 	return 0;
 }
 
@@ -159,7 +180,6 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	// Hint: note that we need the address of `call` instruction, but eip holds
 	// address of the next instruction, so we should substract 5 from it.
 	// Hint: use line_for_address from kern/dwarf_lines.c
-	// Your code here:
 	int line_no = 0;
 	uintptr_t call_addr = addr - 0x5;
 	line_for_address(&addrs, call_addr, line_offset, &line_no);
@@ -181,7 +201,28 @@ dwarf_find_function(const char * const fname)
 	// address_by_fname, which looks for function name in section .debug_pubnames
 	// and naive_address_by_fname which performs full traversal of DIE tree.
 	// LAB3: Your code here
-	return 0;
+	uintptr_t func_addr = 0;
+	int fname_len = strlen(fname);
+	if (!fname_len) {
+		return 0;
+	}
+	struct Dwarf_Addrs addrs;
+	addrs.abbrev_begin = __DEBUG_ABBREV_BEGIN__;
+	addrs.abbrev_end = __DEBUG_ABBREV_END__;
+	addrs.aranges_begin = __DEBUG_ARANGES_BEGIN__;
+	addrs.aranges_end = __DEBUG_ARANGES_END__;
+	addrs.info_begin = __DEBUG_INFO_BEGIN__;
+	addrs.info_end = __DEBUG_INFO_END__;
+	addrs.line_begin = __DEBUG_LINE_BEGIN__;
+	addrs.line_end = __DEBUG_LINE_END__;
+	addrs.str_begin = __DEBUG_STR_BEGIN__;
+	addrs.str_end = __DEBUG_STR_END__;
+	addrs.pubnames_begin = __DEBUG_PUBNAMES_BEGIN__;
+	addrs.pubnames_end = __DEBUG_PUBNAMES_END__;
+	addrs.pubtypes_begin = __DEBUG_PUBTYPES_BEGIN__;
+	addrs.pubtypes_end = __DEBUG_PUBTYPES_END__;
+	address_by_fname(&addrs, fname, &func_addr);
+	return func_addr;
 }
 
 uintptr_t

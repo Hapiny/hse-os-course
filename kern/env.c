@@ -226,15 +226,55 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 static void
 bind_functions(struct Env *e, struct Elf *elf)
 {
-	//find_function from kdebug.c should be used
+	// Таблица заголовков секций представляет собой массив структур struct Secthdr. 
+	// Количество элементов массива определяется полем e_shnum заголовка ELF-файла. 
+	// Массив находится по смещению, хранящемуся в поле e_shoff.
+	struct Secthdr *sh_start = (struct Secthdr *) ((uint8_t *) elf + elf->e_shoff);  // задаем указатель на начало массива со структурами
+	struct Secthdr *sh_end = sh_start + elf->e_shnum;  // задаем конец массива структур
+	struct Secthdr *sh;  //  переменная для цикла, перебирающего все структуры в поисках нужных нам
 
-	*((int *) 0x00231008) = (int) &cprintf;
-	*((int *) 0x00221004) = (int) &sys_yield;
-	*((int *) 0x00231004) = (int) &sys_yield;
-	*((int *) 0x00241004) = (int) &sys_yield;
-	*((int *) 0x0022100c) = (int) &sys_exit;
-	*((int *) 0x00231010) = (int) &sys_exit;
-	*((int *) 0x0024100c) = (int) &sys_exit;
+	// Поле sh_name хранит индекс имени секции. Индекс имени - это смещение в данных секции, 
+	// индекс которой задается в поле e_shstrndx заголовка ELF-файла. 
+	// По этому смещению размещается строка, завершающаяся нулевым байтом, являющаяся именем секции.
+	// Поле e_shstrndx хранит индекс заголовка секции, которая хранит имена всех секций.
+	char *sh_strtab = (char *) elf + sh_start[elf->e_shstrndx].sh_offset;
+	char *strtab = NULL;
+	struct Elf32_Sym *sym_start = NULL, *sym_end = NULL, *sym;
+	uint32_t num_sym_entries = 0;
+
+	const char *sect_name;
+	for (sh = sh_start; sh < sh_end; ++sh) {
+		sect_name = &sh_strtab[sh->sh_name];
+		// Загружаем таблицу строк с именами символов
+		if (!strcmp(sect_name, ".strtab") && !strtab) {
+			strtab = (char *) elf + sh->sh_offset;
+		// Загружаем таблицу символов
+		} else if (!strcmp(sect_name, ".symtab") && !sym_start) {
+			sym_start = (struct Elf32_Sym *)((uint8_t *) elf + sh->sh_offset);
+			sym_end = sym_start + sh->sh_size;
+			num_sym_entries = sh->sh_size / sh->sh_entsize;
+		}
+	}
+	// cprintf("SYMTAB addr: %08x (%d entries)\n", (uint32_t) sym_start, num_sym_entries);
+	// cprintf("STRTAB addr: %08x\n", (uint32_t) strtab);
+
+	uintptr_t addr;
+	const char *symbol;
+	for (sym = sym_start; sym < sym_end; ++sym)  {
+		symbol = &strtab[sym->st_name];
+		// if (sym->st_name > 0 && strlen(symbol)) {
+		// 	cprintf("\tIdx: %d\tName:%s\n", sym->st_name, symbol);
+		// }
+		if (!strlen(symbol)) {
+			continue;
+		}
+		addr = find_function(symbol);
+		if (addr) {
+			// cprintf("Global val: %08x, Kern func addr: %08x\n", sym->st_value, addr);
+			// По адресам глобальных указателей на функции записываются адреса функций ядра
+			*((int *) (sym->st_value)) = (int) addr;
+		}
+	}
 }
 #endif
 
@@ -281,50 +321,40 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 	//  What?  (See env_run() and env_pop_tf() below.)
 
 
-	struct Elf *ELFHDR = (struct Elf *) binary;
+	struct Elf *elf_binary = (struct Elf *) binary;
 	struct Proghdr *ph, *eph;
+	uint32_t remain_bytes = 0; 
 
-	if (ELFHDR->e_magic != ELF_MAGIC)
-		panic("Not executable!");
+	if (elf_binary->e_magic != ELF_MAGIC) {
+		panic("Invalid binary file! Not executable!");
+	}
+
+	// Load each program segment
+	// Set up begining of the first segment in ELF file
+	ph = (struct Proghdr *)((uint8_t *) elf_binary + elf_binary->e_phoff);
+	// Adress of the end of the last segment for loading
+	eph = ph + elf_binary->e_phnum;
 	
-	ph = (struct Proghdr *) ((uint8_t *) ELFHDR + ELFHDR->e_phoff);
-	eph = ph + ELFHDR->e_phnum;
-	
-	for (; ph < eph; ph++)
-		if (ph->p_type == ELF_PROG_LOAD) {
-			memset((void *)ph->p_va, 0, ph->p_memsz);
+	// Run over the segments and copy ELF binary code to the memory
+	for (; ph < eph; ph++) {
+		// Only load segments with ph->p_type == ELF_PROG_LOAD
+		// The ELF header should have ph->p_filesz <= ph->p_memsz
+		if (ph->p_type == ELF_PROG_LOAD && ph->p_filesz <= ph->p_memsz) {
+			// The ph->p_filesz bytes from the ELF binary, starting at
+	        // 'binary + ph->p_offset', should be copied to address ph->p_va
 			memcpy((void *)ph->p_va, binary+ph->p_offset, ph->p_filesz);
+
+			// Any remaining memory bytes should be cleared to zero
+			remain_bytes = ph->p_memsz - ph->p_filesz;
+			memset((void *)ph->p_va, 0, remain_bytes);
 		}
-
-	e->env_tf.tf_eip = ELFHDR->e_entry;
-	//we should set eip to make sure env_pop_tf runs correctly
-
-	// struct Proghdr *ph, *eph;
-	// uint32_t remain_bytes = 0; 
-
-	// // Load each program segment (ignores ph flags)
-	// ph = (struct Proghdr *) ((uint8_t *)binary + ((struct Elf *)binary)->e_phoff);
-	// eph = ph + ((struct Elf *)binary)->e_phnum;
-
-	// for (; ph < eph; ++ph) { 
-	// 	// Only load segments with ph->p_type == ELF_PROG_LOAD
-	// 	// The ELF header should have ph->p_filesz <= ph->p_memsz
-	// 	if (ph->p_type == ELF_PROG_LOAD && ph->p_filesz <= ph->p_memsz) {
-	// 		// The ph->p_filesz bytes from the ELF binary, starting at
-	//         // 'binary + ph->p_offset', should be copied to address ph->p_va
-	// 		memmove((void *)ph->p_va, binary + ph->p_offset, ph->p_filesz);
-
-	// 		// Any remaining memory bytes should be cleared to zero
-	// 		remain_bytes = ph->p_memsz - ph->p_filesz;
-	// 		memset((void *)ph->p_va + ph->p_filesz, 0x0, remain_bytes);
-	// 	}
-	// }
-	// // Setup entry point for the loaded program
-	// e->env_tf.tf_eip = ((struct Elf *)binary)->e_entry;
+	}
+	// Setup entry point for the loaded program
+	e->env_tf.tf_eip = elf_binary->e_entry;
 	
 #ifdef CONFIG_KSPACE
 	// Uncomment this for task №5.
-	bind_functions(e, ELFHDR);
+	bind_functions(e, elf_binary);
 #endif
 }
 
@@ -383,9 +413,9 @@ env_destroy(struct Env *e)
 		sched_yield();
 	}
 
-	// cprintf("Destroyed the only environment - nothing more to do!\n");
-	// while (1)
-	// 	monitor(NULL);
+	cprintf("Destroyed the only environment - nothing more to do!\n");
+	while (1)
+		monitor(NULL);
 }
 
 #ifdef CONFIG_KSPACE
@@ -480,12 +510,14 @@ env_run(struct Env *e)
 	//	and make sure you have set the relevant parts of
 	//	e->env_tf to sensible values.
 
-	if (curenv->env_status == ENV_RUNNING) {
-		curenv->env_status = ENV_RUNNABLE;  // Step 1.
+	if (e != curenv) {
+		if (curenv->env_status == ENV_RUNNING) {
+			curenv->env_status = ENV_RUNNABLE;  // Step 1.
+		}
+		curenv = e;                             // Step 2.
+		curenv->env_status = ENV_RUNNING;       // Step 3.
+		curenv->env_runs += 1;                  // Step 4.
 	}
-	curenv = e;                             // Step 2.
-	curenv->env_status = ENV_RUNNING;       // Step 3.
-	curenv->env_runs += 1;                  // Step 4.
 	env_pop_tf(&e->env_tf);
 }
 

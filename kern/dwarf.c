@@ -71,10 +71,20 @@ static int dwarf_read_abbrev_entry(const void *entry, unsigned form, void *buf,
                 entry += address_size;
                 bytes = address_size;
                 break;
-        case DW_FORM_block2:
+        case DW_FORM_block2: {
                 // Read block of 2-byte length followed by 0 to 65535 contiguous information bytes 
-                // Your code here:
-        break;
+                unsigned length = get_unaligned(entry, Dwarf_Half);
+                entry += sizeof(Dwarf_Half);
+                struct Slice slice = {
+                    .mem = entry,
+                    .len = length,
+                };
+                if (buf) {
+                        memcpy(buf, &slice, sizeof(struct Slice));
+                }
+                entry += length;
+                bytes = sizeof(Dwarf_Half) + length;
+        } break;
         case DW_FORM_block4: {
                 unsigned length = get_unaligned(entry, uint32_t);
                 entry += sizeof(uint32_t);
@@ -592,7 +602,7 @@ address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname,
 {
 	const int flen = strlen(fname);
 	if (flen == 0)
-		return 0;
+	        return 0;
 	const void *pubnames_entry = addrs->pubnames_begin;
 	int count = 0;
 	unsigned long len = 0;
@@ -602,7 +612,7 @@ address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname,
 	while ((const unsigned char *)pubnames_entry < addrs->pubnames_end) {
 		count = dwarf_entry_len(pubnames_entry, &len);
 		if (count == 0) {
-			return -E_BAD_DWARF;
+		        return -E_BAD_DWARF;
 		}
 		pubnames_entry += count;
 		const void *pubnames_entry_end = pubnames_entry + len;
@@ -684,6 +694,15 @@ address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname,
 					// You can read unsigned LEB128 number using dwarf_read_uleb128 function.
 					// Attribute value can be obtained using dwarf_read_abbrev_entry function.
 					// Your code here:
+                                        unsigned name = 0;
+                                        uint32_t low_pc = 0;
+                                        count = dwarf_read_uleb128(abbrev_entry, &name);
+                                        if (name == DW_AT_low_pc) {
+					        count = dwarf_read_abbrev_entry(entry, form, &low_pc, sizeof(low_pc), address_size);
+                                        }
+                                        if (!low_pc) {
+                                                *offset = low_pc;
+                                        }
 				}
 				return 0;
 			}
