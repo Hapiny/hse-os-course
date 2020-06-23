@@ -42,6 +42,9 @@ i386_init(void)
 
 	pic_init();
 	rtc_init();
+	// После инициализации часов RTC и программируемого контроллера прерываний PIC 
+	// необходимо размаскировать на контроллере линию IRQ_CLOCK
+	irq_setmask_8259A(irq_mask_8259A & ~(1 << IRQ_CLOCK));
 
 	load_debug_info();
 

@@ -123,6 +123,7 @@ print_regs(struct PushRegs *regs)
 static void
 trap_dispatch(struct Trapframe *tf)
 {
+	uint8_t status;
 	// Handle processor exceptions.
 
 	// Handle spurious interrupts
@@ -136,6 +137,8 @@ trap_dispatch(struct Trapframe *tf)
 	}
 
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_CLOCK) {
+		status = rtc_check_status();  // 1. Проверяем статус регистра C(читаем CREG функцией rtc_check_status())
+		pic_send_eoi(IRQ_CLOCK);      // 2. Посылаем сигнал об окончании обрабатывания прерывания EOI
 		sched_yield();
 		return;
 	}

@@ -268,10 +268,10 @@ bind_functions(struct Env *e, struct Elf *elf)
 		bool is_global = ELF32_ST_BIND(sym->st_info) & STB_GLOBAL;
 
 		if (is_global && is_object && strlen(symbol)) {
-			cprintf("\tIdx: %d\tName:%s\n", sym->st_name, symbol);
+			// cprintf("\tIdx: %d\tName:%s\n", sym->st_name, symbol);
 			addr = find_function(symbol);
 			if (addr) {
-				cprintf("Global val: %08x, Kern func addr: %08x\n", sym->st_value, addr);
+				// cprintf("Global val: %08x, Kern func addr: %08x\n", sym->st_value, addr);
 				// По адресам глобальных указателей на функции записываются адреса функций ядра
 				*((int *) (sym->st_value)) = (int) addr;
 			}
