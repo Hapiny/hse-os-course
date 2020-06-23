@@ -222,6 +222,9 @@ dwarf_find_function(const char * const fname)
 	addrs.pubtypes_begin = __DEBUG_PUBTYPES_BEGIN__;
 	addrs.pubtypes_end = __DEBUG_PUBTYPES_END__;
 	address_by_fname(&addrs, fname, &func_addr);
+	if (!func_addr) {
+		naive_address_by_fname(&addrs, fname, &func_addr);
+	}
 	return func_addr;
 }
 

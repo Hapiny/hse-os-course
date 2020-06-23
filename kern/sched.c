@@ -25,19 +25,32 @@ sched_yield(void)
 	// simply drop through to the code
 	// below to halt the cpu.
 
-	struct Env *e;
-	if (!curenv) {
-		curenv = &envs[NENV - 1];
+	struct Env *env;
+	// Берем следующий ENV
+	// Если curenv - NULL (в самом начале никто не запущен), то идем с начала массива envs
+	// Иначе берем следующий из массива с учетом того, что текущий может последним, 
+	// поэтому берем по модулю
+	if (curenv) {
+		env = envs + (curenv - envs + 1) % NENV;
+	} else {
+		env = envs;
 	}
+	struct Env *candidate_env = env;
 
-	
-	e = &envs[(curenv - envs + 1) % NENV];
+	do {
+		// Если нашли RUNNABLE, то запускаем, иначе идем дальше
+		if (env && env->env_status == ENV_RUNNABLE) {
+			// cprintf("Running env: %d\n", ENVX(env->env_id));
+			env_run(env);
+		}
+		env = envs + (env - envs + 1) % NENV;
+	} while (env != candidate_env);
 
-	while (e != curenv && e->env_status != ENV_RUNNABLE) {
-		e = &envs[(e - envs + 1) % NENV];
-	}
-	if (e->env_status == ENV_RUNNABLE || e->env_status == ENV_RUNNING) {
-		env_run(e);
+	// К этому моменту мы посмотрели весь список и там никто не готов запуститься
+	// Значит, если текущий CURENV запущен, то продолжаем его
+	if (curenv && curenv->env_status == ENV_RUNNING) {
+		// cprintf("Continue env: %d\n", ENVX(env->env_id));
+		env_run(curenv);
 	}
 	
 	// sched_halt never returns

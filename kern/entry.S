@@ -111,7 +111,6 @@ sys_yield:
 	call csys_yield
 	jmp .
 
-#LAB 3: Your code here.
 #ifndef __clang__
 .stabs "sys_exit:",36,0,0,sys_exit
 #endif

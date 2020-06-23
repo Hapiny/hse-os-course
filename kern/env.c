@@ -126,12 +126,22 @@ env_init(void)
 		envs[i].env_link = env_free_list;
 		envs[i].env_status = ENV_FREE;
 		envs[i].env_id = 0;
-		env_free_list = &envs[i];
+		envs[i].env_runs = 0;
+		env_free_list = envs + i;
 	}
 	
 	// Per-CPU part of the initialization
 	env_init_percpu();
 }
+
+// void
+// print_envs()
+// {
+// 	int i = 0;
+// 	for (; i < NENV; i++) {
+// 		cprintf("Env id: %d\tEnv status %d")
+// 	}
+// }
 
 // Load GDT and segment descriptors.
 void
@@ -262,17 +272,18 @@ bind_functions(struct Env *e, struct Elf *elf)
 	const char *symbol;
 	for (sym = sym_start; sym < sym_end; ++sym)  {
 		symbol = &strtab[sym->st_name];
-		// if (sym->st_name > 0 && strlen(symbol)) {
-		// 	cprintf("\tIdx: %d\tName:%s\n", sym->st_name, symbol);
-		// }
-		if (!strlen(symbol)) {
-			continue;
-		}
-		addr = find_function(symbol);
-		if (addr) {
-			// cprintf("Global val: %08x, Kern func addr: %08x\n", sym->st_value, addr);
-			// По адресам глобальных указателей на функции записываются адреса функций ядра
-			*((int *) (sym->st_value)) = (int) addr;
+		
+		bool is_object = ELF32_ST_TYPE(sym->st_info) & STT_OBJECT;
+		bool is_global = ELF32_ST_BIND(sym->st_info) & STB_GLOBAL;
+
+		if (is_global && is_object && strlen(symbol)) {
+			cprintf("\tIdx: %d\tName:%s\n", sym->st_name, symbol);
+			addr = find_function(symbol);
+			if (addr) {
+				cprintf("Global val: %08x, Kern func addr: %08x\n", sym->st_value, addr);
+				// По адресам глобальных указателей на функции записываются адреса функций ядра
+				*((int *) (sym->st_value)) = (int) addr;
+			}
 		}
 	}
 }
@@ -390,6 +401,7 @@ env_free(struct Env *e)
 {
 	// Note the environment's demise.
 	cprintf("[%08x] free env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
+	cprintf("Destroyed env: %d. Num runs: %d\n", ENVX(e->env_id), e->env_runs);
 
 	// return the environment to the free list
 	e->env_status = ENV_FREE;
@@ -510,14 +522,12 @@ env_run(struct Env *e)
 	//	and make sure you have set the relevant parts of
 	//	e->env_tf to sensible values.
 
-	if (e != curenv) {
-		if (curenv->env_status == ENV_RUNNING) {
-			curenv->env_status = ENV_RUNNABLE;  // Step 1.
-		}
-		curenv = e;                             // Step 2.
-		curenv->env_status = ENV_RUNNING;       // Step 3.
-		curenv->env_runs += 1;                  // Step 4.
+	if (curenv && e != curenv && curenv->env_status == ENV_RUNNING) {
+		curenv->env_status = ENV_RUNNABLE;  // Step 1.
 	}
+	curenv = e;                             // Step 2.
+	curenv->env_status = ENV_RUNNING;       // Step 3.
+	curenv->env_runs += 1;                  // Step 4.
 	env_pop_tf(&e->env_tf);
 }
 
