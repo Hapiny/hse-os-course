@@ -11,11 +11,8 @@
 #include <kern/trap.h>
 #include <kern/sched.h>
 #include <kern/cpu.h>
-<<<<<<< HEAD
-=======
 #include <kern/picirq.h>
 #include <kern/kclock.h>
->>>>>>> lab4
 
 void load_debug_info(void);
 void readsect(void*, uint32_t);

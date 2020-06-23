@@ -36,10 +36,7 @@
 #define IRQ_KBD          1
 #define IRQ_SERIAL       4
 #define IRQ_SPURIOUS     7
-<<<<<<< HEAD
-=======
 #define IRQ_CLOCK        8
->>>>>>> lab4
 #define IRQ_IDE         14
 #define IRQ_ERROR       19
 
