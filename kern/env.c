@@ -134,15 +134,6 @@ env_init(void)
 	env_init_percpu();
 }
 
-// void
-// print_envs()
-// {
-// 	int i = 0;
-// 	for (; i < NENV; i++) {
-// 		cprintf("Env id: %d\tEnv status %d")
-// 	}
-// }
-
 // Load GDT and segment descriptors.
 void
 env_init_percpu(void)
@@ -458,6 +449,7 @@ env_pop_tf(struct Trapframe *tf)
 #ifdef CONFIG_KSPACE
 	static uintptr_t eip = 0;
 	eip = tf->tf_eip;
+	tf->tf_eflags |= FL_IF;
 
 	asm volatile (
 		"mov %c[ebx](%[tf]), %%ebx \n\t"
