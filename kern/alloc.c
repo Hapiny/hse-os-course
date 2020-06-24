@@ -42,7 +42,7 @@ test_alloc(uint8_t nbytes)
 		((Header *) &space)->s.size = (SPACE_SIZE - sizeof(Header)) / sizeof(Header);
 		freep = &base;
 	}
-
+	// Можно ли тут поставить lock?
 	check_list();
 
 	for(p = freep->s.next; ; p = p->s.next) {
