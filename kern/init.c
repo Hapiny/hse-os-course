@@ -6,8 +6,10 @@
 #include <inc/dwarf.h>
 
 #include <kern/monitor.h>
+#include <kern/tsc.h>
 #include <kern/console.h>
 #include <kern/env.h>
+#include <kern/timer.h>
 #include <kern/trap.h>
 #include <kern/sched.h>
 #include <kern/cpu.h>
@@ -17,6 +19,41 @@
 void load_debug_info(void);
 void readsect(void*, uint32_t);
 void readseg(uint32_t, uint32_t, uint32_t);
+
+void
+timers_init(void)
+{
+	timertab[0] = timer_rtc;
+	timertab[1] = timer_pit;
+	timertab[2] = timer_acpipm;
+	timertab[3] = timer_hpet0;
+	timertab[4] = timer_hpet1;
+
+	for (int i = 0; i < MAX_TIMERS; i++) {
+		if (timertab[i].timer_init != NULL) {
+			timertab[i].timer_init();
+		}
+	}
+
+}
+
+void
+timers_schedule(const char *name)
+{
+	for (int i = 0; i < MAX_TIMERS; i++) {
+		if (timertab[i].timer_name != NULL && strcmp(timertab[i].timer_name, name) == 0) {
+			if (timertab[i].enable_interrupts != NULL) {
+				timer_for_schedule = &timertab[i];
+				timertab[i].enable_interrupts();
+			} else {
+				panic("Timer %s does not support interrupts\n", name);
+			}
+			return;
+		}
+	}
+
+	panic("Timer %s does not exist\n", name);
+}
 
 void
 i386_init(void)
@@ -35,9 +72,13 @@ i386_init(void)
 	cprintf("6828 decimal is %o octal!\n", 6828);
 	cprintf("END: %p\n", end);
 
+	timers_init();
+
 	// user environment initialization functions
 	env_init();
 
+	// chose the timer used for scheduling: hpet or pit
+	timers_schedule("hpet0");
 	clock_idt_init();
 
 	pic_init();
@@ -54,6 +95,8 @@ i386_init(void)
 	ENV_CREATE_KERNEL_TYPE(prog_test2);
 	ENV_CREATE_KERNEL_TYPE(prog_test3);
 	ENV_CREATE_KERNEL_TYPE(prog_test4);
+	ENV_CREATE_KERNEL_TYPE(prog_test5);
+	ENV_CREATE_KERNEL_TYPE(prog_test6);
 #endif
 
 	// Schedule and run the first user environment!

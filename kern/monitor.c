@@ -11,6 +11,8 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/tsc.h>
+#include <kern/timer.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
